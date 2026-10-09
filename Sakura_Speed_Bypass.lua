@@ -51,6 +51,7 @@ local State = {
     toggleKey = Enum.KeyCode.V,
     isVisible = true,
     listeningKey = false,
+    uiScale = 1,
 }
 
 local Bypass = {
@@ -73,6 +74,7 @@ local function saveConfig()
             Mode = State.mode,
             ToggleKey = State.toggleKey.Name,
             IsVisible = State.isVisible,
+            UiScale = State.uiScale,
         }))
     end)
 end
@@ -86,6 +88,7 @@ local function loadConfig()
         State.powerValue = tonumber(data.PowerValue) or CONSTANTS.DEFAULT_POWER_PC
         State.mode = data.Mode or "PC"
         State.isVisible = data.IsVisible ~= false
+        State.uiScale = math.clamp(tonumber(data.UiScale) or 1, 0.7, 1.4)
         if data.ToggleKey and Enum.KeyCode[data.ToggleKey] then
             State.toggleKey = Enum.KeyCode[data.ToggleKey]
         end
@@ -379,22 +382,30 @@ local function buildGui()
     discordLbl.Parent = header
 
     -- Minimize
-    local minBtn = Instance.new("TextButton")
-    minBtn.Name = "Minimize"
-    minBtn.Size = UDim2.new(0, 30, 0, 24)
-    minBtn.Position = UDim2.new(1, -38, 0, 10)
-    minBtn.BackgroundColor3 = Theme.PanelBtn
-    minBtn.BackgroundTransparency = 0.15
-    minBtn.BorderSizePixel = 0
-    minBtn.Text = "—"
-    minBtn.Font = Enum.Font.GothamBold
-    minBtn.TextSize = 14
-    minBtn.TextColor3 = Theme.Text
-    minBtn.AutoButtonColor = false
-    minBtn.ZIndex = 10
-    minBtn.Parent = header
-    corner(minBtn, 9)
-    stroke(minBtn, Theme.Stroke, 1, 0.35)
+    -- UI scale < > and minimize —
+    local function makeTinyBtn(name, text, xOff)
+        local b = Instance.new("TextButton")
+        b.Name = name
+        b.Size = UDim2.new(0, 26, 0, 24)
+        b.Position = UDim2.new(1, xOff, 0, 10)
+        b.BackgroundColor3 = Theme.PanelBtn
+        b.BackgroundTransparency = 0.15
+        b.BorderSizePixel = 0
+        b.Text = text
+        b.Font = Enum.Font.GothamBold
+        b.TextSize = 14
+        b.TextColor3 = Theme.Text
+        b.AutoButtonColor = false
+        b.ZIndex = 10
+        b.Parent = header
+        corner(b, 8)
+        stroke(b, Theme.Stroke, 1, 0.35)
+        return b
+    end
+
+    local scaleDownBtn = makeTinyBtn("ScaleDown", "<", -92)
+    local scaleUpBtn = makeTinyBtn("ScaleUp", ">", -64)
+    local minBtn = makeTinyBtn("Minimize", "—", -36)
 
     -- Mode pill (PC / MOBILE) — matches photo: rounded capsule
     local modeBox = Instance.new("Frame")
@@ -667,6 +678,21 @@ local function refreshVisibility()
     if Refs.minBtn then Refs.minBtn.Text = v and "—" or "+" end
 end
 
+local function refreshUIScale()
+    State.uiScale = math.clamp(tonumber(State.uiScale) or 1, 0.7, 1.4)
+    if Refs.uiScaleObj then
+        Refs.uiScaleObj.Scale = State.uiScale
+    end
+end
+
+local function stepUIScale(dir)
+    State.uiScale = math.clamp((tonumber(State.uiScale) or 1) + dir * 0.1, 0.7, 1.4)
+    -- round to 1 decimal
+    State.uiScale = math.floor(State.uiScale * 10 + 0.5) / 10
+    refreshUIScale()
+    saveConfig()
+end
+
 local function setPower(val)
     val = math.clamp(math.floor(tonumber(val) or State.powerValue), CONSTANTS.MIN_POWER, CONSTANTS.MAX_POWER)
     State.powerValue = val
@@ -764,6 +790,17 @@ local function bindEvents()
         saveConfig()
     end)
 
+    if r.scaleDownBtn then
+        r.scaleDownBtn.MouseButton1Click:Connect(function()
+            stepUIScale(-1)
+        end)
+    end
+    if r.scaleUpBtn then
+        r.scaleUpBtn.MouseButton1Click:Connect(function()
+            stepUIScale(1)
+        end)
+    end
+
     Services.UserInput.InputBegan:Connect(function(input)
         if State.listeningKey then return end
         if input.UserInputType == Enum.UserInputType.Keyboard
@@ -784,6 +821,7 @@ refreshStatus()
 refreshPower()
 refreshKey()
 refreshVisibility()
+refreshUIScale()
 bindEvents()
 
 if State.enabled then
